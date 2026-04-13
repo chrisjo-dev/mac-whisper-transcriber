@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Whisper Transcriber</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f0f; color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 40px 20px; }
+  h1 { font-size: 1.6rem; margin-bottom: 24px; color: #fff; }
+  .container { width: 100%; max-width: 640px; }
+
+  /* Full-page drop overlay */
+  .drop-overlay {
+    display: none; position: fixed; inset: 0; z-index: 100;
+    background: rgba(108, 140, 255, .08); border: 3px dashed #6c8cff;
+    justify-content: center; align-items: center;
+    font-size: 1.3rem; color: #6c8cff; pointer-events: none;
+  }
+  .drop-overlay.active { display: flex; }
+
+  /* Drop zone */
+  .dropzone {
+    border: 2px dashed #444; border-radius: 12px; padding: 80px 24px;
+    text-align: center; cursor: pointer; transition: all .2s;
+    background: #1a1a1a; margin-bottom: 16px;
+  }
+  .dropzone.hover { border-color: #6c8cff; background: #1e2233; }
+  .dropzone p { font-size: 1rem; color: #888; }
+  .dropzone .filename { color: #6c8cff; font-weight: 600; margin-top: 8px; }
+
+  /* Controls */
+  .controls { display: flex; gap: 12px; margin-bottom: 24px; }
+  select, button {
+    padding: 10px 16px; border-radius: 8px; border: 1px solid #333;
+    background: #1a1a1a; color: #e0e0e0; font-size: .9rem; cursor: pointer;
+  }
+  button.primary { background: #6c8cff; color: #fff; border: none; font-weight: 600; flex: 1; }
+  button.primary:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary:hover:not(:disabled) { background: #5a7af0; }
+
+  /* Progress */
+  .progress { display: none; margin-bottom: 24px; text-align: center; color: #888; }
+  .progress.active { display: block; }
+  .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid #444; border-top-color: #6c8cff; border-radius: 50%; animation: spin .8s linear infinite; margin-right: 8px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Result */
+  .result { display: none; }
+  .result.active { display: block; }
+  .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .result-header h2 { font-size: 1rem; }
+  .btn-group { display: flex; gap: 8px; }
+  .btn-sm {
+    padding: 6px 12px; border-radius: 6px; border: 1px solid #333;
+    background: #1a1a1a; color: #ccc; font-size: .8rem; cursor: pointer;
+  }
+  .btn-sm:hover { background: #2a2a2a; }
+  .btn-sm.copied { background: #2a4a2a; border-color: #4a8a4a; color: #8f8; }
+  textarea {
+    width: 100%; min-height: 240px; padding: 16px; border-radius: 8px;
+    border: 1px solid #333; background: #1a1a1a; color: #e0e0e0;
+    font-size: .9rem; line-height: 1.6; resize: vertical; font-family: inherit;
+  }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; margin-bottom: 12px; }
+  .tab {
+    padding: 8px 20px; background: #1a1a1a; border: 1px solid #333;
+    cursor: pointer; font-size: .85rem; color: #888;
+  }
+  .tab:first-child { border-radius: 8px 0 0 8px; }
+  .tab:last-child { border-radius: 0 8px 8px 0; }
+  .tab.active { background: #2a2a2a; color: #fff; border-color: #555; }
+</style>
+</head>
+<body>
+
+<div class="drop-overlay" id="dropOverlay">여기에 파일을 놓으세요</div>
+
+<h1>Whisper Transcriber</h1>
+<div class="container">
+
+  <div class="dropzone" id="dropzone">
+    <p>오디오 파일을 여기에 드래그하거나 클릭하세요</p>
+    <p style="font-size:.8rem; color:#555; margin-top:4px;">m4a, mp3, wav, webm, ogg</p>
+    <div class="filename" id="filename"></div>
+  </div>
+  <input type="file" id="fileInput" accept="audio/*" hidden>
+
+  <div class="controls">
+    <select id="lang">
+      <option value="ko" selected>한국어</option>
+      <option value="en">English</option>
+      <option value="ja">日本語</option>
+      <option value="zh">中文</option>
+      <option value="auto">Auto</option>
+    </select>
+    <button class="primary" id="btnStart" disabled>변환하기</button>
+  </div>
+
+  <div class="progress" id="progress">
+    <span class="spinner"></span> 변환 중... 파일 크기에 따라 시간이 걸릴 수 있습니다.
+  </div>
+
+  <div class="result" id="result">
+    <div class="tabs">
+      <div class="tab active" data-target="txt">텍스트</div>
+      <div class="tab" data-target="srt">자막 (SRT)</div>
+    </div>
+    <div class="result-header">
+      <h2 id="resultTitle">결과</h2>
+      <div class="btn-group">
+        <button class="btn-sm" id="btnCopy">복사하기</button>
+        <button class="btn-sm" id="btnDownloadTxt">TXT 다운로드</button>
+        <button class="btn-sm" id="btnDownloadSrt">SRT 다운로드</button>
+      </div>
+    </div>
+    <textarea id="output" readonly></textarea>
+  </div>
+
+</div>
+
+<script>
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("fileInput");
+const filenameEl = document.getElementById("filename");
+const btnStart = document.getElementById("btnStart");
+const progress = document.getElementById("progress");
+const result = document.getElementById("result");
+const output = document.getElementById("output");
+let selectedFile = null;
+let resultData = { txt: "", srt: "" };
+let currentTab = "txt";
+
+// Drag & drop — full page
+const dropOverlay = document.getElementById("dropOverlay");
+let dragCounter = 0;
+document.addEventListener("dragenter", (e) => { e.preventDefault(); dragCounter++; dropOverlay.classList.add("active"); });
+document.addEventListener("dragleave", (e) => { e.preventDefault(); dragCounter--; if (dragCounter <= 0) { dragCounter = 0; dropOverlay.classList.remove("active"); } });
+document.addEventListener("dragover", (e) => e.preventDefault());
+document.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dragCounter = 0;
+  dropOverlay.classList.remove("active");
+  if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+});
+
+// Click to select
+dropzone.addEventListener("click", () => fileInput.click());
+dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("hover"); });
+dropzone.addEventListener("dragleave", () => dropzone.classList.remove("hover"));
+fileInput.addEventListener("change", () => { if (fileInput.files.length) setFile(fileInput.files[0]); });
+
+function setFile(f) {
+  selectedFile = f;
+  filenameEl.textContent = f.name;
+  btnStart.disabled = false;
+}
+
+// Tabs
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    currentTab = tab.dataset.target;
+    output.value = resultData[currentTab] || "";
+  });
+});
+
+// Transcribe
+btnStart.addEventListener("click", async () => {
+  if (!selectedFile) return;
+  btnStart.disabled = true;
+  progress.classList.add("active");
+  result.classList.remove("active");
+
+  const form = new FormData();
+  form.append("file", selectedFile);
+  form.append("lang", document.getElementById("lang").value);
+
+  try {
+    const res = await fetch("/transcribe", { method: "POST", body: form });
+    const data = await res.json();
+    if (data.error) {
+      alert("Error: " + data.error);
+    } else {
+      resultData = data;
+      output.value = resultData[currentTab] || "";
+      result.classList.add("active");
+    }
+  } catch (e) {
+    alert("서버 연결 실패: " + e.message);
+  } finally {
+    progress.classList.remove("active");
+    btnStart.disabled = false;
+  }
+});
+
+// Copy
+document.getElementById("btnCopy").addEventListener("click", async (e) => {
+  await navigator.clipboard.writeText(output.value);
+  const btn = e.target;
+  btn.textContent = "복사됨!";
+  btn.classList.add("copied");
+  setTimeout(() => { btn.textContent = "복사하기"; btn.classList.remove("copied"); }, 1500);
+});
+
+// Download
+function download(content, ext) {
+  const name = selectedFile ? selectedFile.name.replace(/\.[^.]+$/, "") : "transcript";
+  const blob = new Blob([content], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name + "." + ext;
+  a.click();
+}
+document.getElementById("btnDownloadTxt").addEventListener("click", () => download(resultData.txt, "txt"));
+document.getElementById("btnDownloadSrt").addEventListener("click", () => download(resultData.srt, "srt"));
+</script>
+</body>
+</html>
