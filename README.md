@@ -56,6 +56,8 @@ m4a, mp3, wav, webm, ogg — any audio format ffmpeg can handle
 로컬 Mac에서 돌아가는 음성 → 텍스트 변환 웹 UI.  
 [whisper.cpp](https://github.com/ggerganov/whisper.cpp)와 ffmpeg을 사용합니다. 클라우드 없이 로컬에서 모두 처리됩니다.
 
+보다 자세한 사항 [블로그 참고](https://chrisjo-dev.github.io/notion-blog/posts/macbook-m4%EC%97%90%EC%84%9C-whisper-%EB%AA%A8%EB%8D%B8%EC%9D%84-%EB%A1%9C%EC%BB%AC%EB%A1%9C-%EB%8F%8C%EB%A0%A4%EB%B3%B4%EC%9E%90-whispercpp-%EC%84%A4%EC%B9%98%EB%B6%80%ED%84%B0-%ED%95%9C%EA%B5%AD%EC%96%B4-%EC%9D%8C%EC%84%B1-%EB%B3%80%ED%99%98%EA%B9%8C%EC%A7%80/)
+
 ### 동작 방식
 
 ```
